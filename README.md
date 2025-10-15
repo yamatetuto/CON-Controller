@@ -1,0 +1,2 @@
+# CON-Controller
+IAI社CON系コントローラをModbusプロトコルで制御するPythonモジュール
