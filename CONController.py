@@ -331,7 +331,7 @@ if __name__ == "__main__":
     controller = None # finallyブロックで使うため先に定義
     try:
         # コントローラインスタンスを作成
-        controller = IAIController(PORT, SLAVE_ID, BAUD)
+        controller = CONController(PORT, SLAVE_ID, BAUD)
         controller.get_current_alarm()
         
         # ポジションテーブルの内容を確認
