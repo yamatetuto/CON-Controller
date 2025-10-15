@@ -6,8 +6,8 @@ class CONController:
     """
     IAI社製ポジショナーコントローラをModbus RTUで操作するためのクラス。
     """
-    # --- Modbusレジスタアドレス (資料より) ---
-    POS_TABLE_START = 0x1000   # ポジションテーブル開始アドレス (資料 p.98)
+    # --- Modbusレジスタアドレス---
+    POS_TABLE_START = 0x1000   # ポジションテーブル開始アドレス
     REG_CONTROL = 0x0D00       # デバイス制御レジスタ1 (DRG1)
     REG_POS_SELECT = 0x0D03    # ポジション番号指定レジスタ (POSR)
     REG_CURRENT_POS = 0x9000   # 現在位置レジスタ (PNOW)
@@ -15,7 +15,7 @@ class CONController:
     REG_DEVICE_STATUS = 0x9005 # デバイスステータスレジスタ1 (DSS1)
     REG_EXT_STATUS = 0x9007    # 拡張デバイスステータスレジスタ (DSSE)
     REG_CURRENT_VALUE = 0x900C # 電流値モニターレジスタ (CNOW) 
-    REG_LOAD_CELL = 0x901E     # 現在荷重データモニタ (FBFC) (資料 p.66)
+    REG_LOAD_CELL = 0x901E     # 現在荷重データモニタ (FBFC)
 
     # --- 制御値 (ビットマスク) ---
     VAL_SERVO_ON = 0x1000      # ビット12: サーボON
@@ -32,7 +32,7 @@ class CONController:
     BIT_MOVE = 5               # MOVE (移動中信号)
 
     def __init__(self, port, slave_address, baudrate):
-        """コントローラの初期化と接続を行います。"""
+        """コントローラの初期化と接続を行う。"""
         try:
             self.instrument = minimalmodbus.Instrument(port, slave_address)
             self.instrument.serial.baudrate = baudrate
@@ -46,19 +46,19 @@ class CONController:
             raise
 
     def close(self):
-        """シリアルポートを安全にクローズします。"""
+        """シリアルポートを安全にクローズ。"""
         if self.instrument and self.instrument.serial.is_open:
             self.instrument.serial.close()
             print("ポートをクローズしました。")
 
     def check_status_bit(self, register, bit_position):
-        """指定したレジスタの特定ビットが1か0かを確認します。"""
+        """指定したレジスタの特定ビットが1か0かを確認。"""
         status = self.instrument.read_register(register, functioncode=3)
         # print(bin(status)) # デバッグ用: 現在の拡張ステータスを表示
         return (status >> bit_position) & 1
 
     def wait_for_motion_to_stop(self, timeout=10):
-        """移動中(MOVE)信号がOFFになるのを待ちます。"""
+        """移動中(MOVE)信号がOFFになるのを待つ。"""
         start_time = time.time()
         print("   ... (移動中信号が 0 になるのを待機中)")
         while True:
@@ -80,7 +80,7 @@ class CONController:
             time.sleep(0.1)
 
     def wait_for_status_bit(self, register, bit_position, expected_state=1, timeout=15):
-        """status bitの確認"""
+        """status bitの確認。"""
         start_time = time.time()
         # pdb.set_trace()  # デバッグ用ブレークポイント
         print(f"   ... (ビット {bit_position} が {expected_state} になるのを待機中)")
@@ -103,7 +103,7 @@ class CONController:
             time.sleep(0.1)
 
     def servo_on(self, timeout=10):
-        """サーボをONにし、安定するまで待ちます。"""
+        """サーボをONにし、安定するまで待つ。"""
         print("\n1. サーボをオンにします...")
         self.instrument.write_register(self.REG_CONTROL, self.VAL_SERVO_ON, functioncode=6)
         
@@ -113,13 +113,13 @@ class CONController:
             raise RuntimeError("[Error] サーボONに失敗しました。")
 
     def servo_off(self):
-        """サーボをOFFにします。"""
+        """サーボをOFF。"""
         print("\n5. サーボをオフにします...")
         self.instrument.write_register(self.REG_CONTROL, 0, functioncode=6)
         print("   サーボOFF完了。")
 
     def home(self, timeout=20):
-        """原点復帰を実行し、物理的に完了するまで待ちます。"""
+        """原点復帰を実行し、物理的に完了するまで待つ。"""
         print("\n2. 原点復帰を開始します...")
         self.instrument.write_register(self.REG_CONTROL, self.VAL_SERVO_ON, functioncode=6)
         self.instrument.write_register(self.REG_CONTROL, self.VAL_HOME, functioncode=6)
@@ -138,86 +138,10 @@ class CONController:
         # else:
         #     raise RuntimeError("エラー: 移動は停止しましたが、HEND信号がONになりませんでした。")
 
-    def set_position_data(self, position_number:int, position_mm=None, width_mm=0.1, speed_mm_s=78.0, accel_g=0.30, decel_g=0.30, push_current_percent=0, push_direction=False):
-        """
-        指定したポジション番号のテーブルデータを書き換えます。(資料 p.144)
-        変更したいパラメータのみをキーワード引数で指定してください。
-        """
-        is_push_move = (push_current_percent != 0)
-        if is_push_move:
-            print(f"\n*. 押付け移動")
-            # 押付け動作には押付け幅(width_mm)が必須
-            if width_mm is None:
-                raise ValueError("押付け動作には width_mm (押付け幅) の指定が必須です。")
-        else:
-            print(f"\n*. 直値移動")
-            push_direction = False # 直値移動では押付け方向は無効
-
-        # 数値チェック
-        if position_number < 0 or position_number > 63:
-            raise ValueError("[ポジションNo.]は 0 から 63 の範囲で指定してください。")
-        if position_mm is None or position_mm < 0 or position_mm > 4.0:
-            raise ValueError("[目標位置]は0.0 から 4.0 mm の範囲で指定してください。")
-        if is_push_move and ((push_direction == False and position_mm + width_mm > 4.0) or (push_direction == True and position_mm - width_mm < 0.0)):
-            raise ValueError("押し付け移動では[目標位置]と[位置決め幅]合わせて 0.0 から 4.0 mm の範囲内になるようwidth_mm を指定してください。")
-        if is_push_move == False and (width_mm < 0.0 or width_mm > 0.5):
-            raise ValueError("直値移動では[位置決め幅]は 0.0 mm から 0.5 mm に設定してください。")
-        if speed_mm_s < 5.0 or speed_mm_s > 78.0:
-            raise ValueError("[速度]は 5.0 から 78.0 mm/s の範囲で指定してください。")
-        if accel_g < 0.01 or accel_g > 0.3:
-            raise ValueError("[加速度]は 0.01 から 0.3 G の範囲で指定してください。")
-        if decel_g < 0.01 or decel_g > 0.3:
-            raise ValueError("[減速度]は 0.01 から 0.3 G の範囲で指定してください。")
-        if is_push_move and (push_current_percent < 20 or push_current_percent > 70):
-            raise ValueError("[押付け]は 20 から 70 % の範囲で指定してください。")
-        
-        print(f"\n【データ書込】ポジションNo.{position_number} のデータを書き込みます...")
-        try:
-            base_addr = self.POS_TABLE_START + (16 * position_number)
-            
-            val = int(position_mm * 100)
-            self.instrument.write_long(base_addr + 0, val, signed=True)
-            print(f"   - 目標位置を {position_mm:.2f} mm に設定しました。")
-
-            val = int(width_mm * 100)
-            self.instrument.write_long(base_addr + 2, val, signed=False)
-            print(f"   - 位置決め幅を {width_mm:.2f} mm に設定しました。")
-
-            val = int(speed_mm_s * 100)
-            self.instrument.write_long(base_addr + 4, val, signed=False)
-            print(f"   - 速度を {speed_mm_s:.2f} mm/s に設定しました。")
-
-            val = int(accel_g * 100)
-            self.instrument.write_register(base_addr + 10, val)
-            print(f"   - 加速度を {accel_g:.2f} G に設定しました。")
-        
-            val = int(decel_g * 100)
-            self.instrument.write_register(base_addr + 11, val)
-            print(f"   - 減速度を {decel_g:.2f} G に設定しました。")
-
-            # %からコントローラ用の値 (0-255) に変換
-            val = int(255 * push_current_percent / 100)
-            # オフセット+0CH (12) のレジスタに書き込む
-            self.instrument.write_register(base_addr + 12, val)
-            if is_push_move == False:
-                self.instrument.write_register(base_addr + 14, 0b0000)
-            elif is_push_move and push_direction == False:
-                self.instrument.write_register(base_addr + 14, 0b0010)
-            elif is_push_move and push_current_percent == True:
-                self.instrument.write_register(base_addr + 14, 0b0110)
-            print(f"   - 押付け時電流制限値を {push_current_percent}% に設定しました。")
-
-            print("   書き込み完了。")
-            time.sleep(0.1) 
-            return True
-
-        except Exception as e:
-            print(f"   [Error] ポジションデータの書き込みに失敗しました: {e}")
-            return False
         
     def set_position_data(self, position_number:int, position_mm=None, width_mm=0.1, speed_mm_s=78.0, accel_g=0.30, decel_g=0.30, push_current_percent=0, push_direction=False):
         """
-        指定したポジション番号のテーブルデータを書き換えます。(資料 p.144)
+        指定したポジション番号のテーブルデータを書き換える。(資料 p.227)
         """
         def validate_range(val, minv, maxv, label):
             if val is None or not (minv <= val <= maxv):
@@ -281,7 +205,7 @@ class CONController:
 
 
     def move_to_pos(self, position_number, timeout=15):
-        """指定したポジション番号へ移動し、物理的に完了するまで待ちます。"""
+        """指定したポジション番号へ移動し、物理的に完了するまで待つ。"""
         print(f"\n3. ポジションテーブル No.{position_number} へ移動します...")
         self.instrument.write_register(self.REG_POS_SELECT, position_number, functioncode=6)
         print(f"   移動先 ({position_number}) を設定しました。")
@@ -299,8 +223,8 @@ class CONController:
 
     def get_position_data(self, position_number):
         """
-        指定したポジション番号のテーブルデータを全て読み出します。(資料 p.98)
-        戻り値: ポジションデータを格納した辞書(dict)
+        指定したポジション番号のテーブルデータを全て読み出す。(資料 p.98)
+        返値: ポジションデータを格納した辞書(dict)
         """
         print(f"\n【情報照会】ポジションテーブル No.{position_number} のデータを読み出します...")
         try:
@@ -341,7 +265,7 @@ class CONController:
             return None
 
     def get_current_position(self):
-        """現在位置をmm単位で取得します。"""
+        """現在位置をmm単位で取得。"""
         print("\n4. 現在位置を読み出します...")
         pos_raw = self.instrument.read_long(self.REG_CURRENT_POS, functioncode=3, signed=True)
         pos_mm = pos_raw / 100.0
@@ -349,7 +273,7 @@ class CONController:
         return pos_mm
 
     def get_current_mA(self):
-        """モーターの現在電流値をmA単位で取得します。(資料 p.135)"""
+        """モーターの現在電流値をmA単位で取得。(資料 p.135)"""
         print("\n4c. 現在のモーター電流値を読み出します...")
         try:
             current_raw = self.instrument.read_long(self.REG_CURRENT_VALUE, functioncode=3, signed=False)
@@ -360,7 +284,7 @@ class CONController:
             return None
 
     def get_current_alarm(self):
-        """現在発生中のアラームコードを取得します。"""
+        """現在発生中のアラームコードを取得。"""
         print("\n4b. 現在発生中のアラームを確認します...")
         alarm_code = self.instrument.read_register(self.REG_CURRENT_ALARM, functioncode=3)
         if alarm_code == 0:
@@ -370,7 +294,7 @@ class CONController:
         return alarm_code
     
     def get_push_detect(self):
-        """押付け空振り状態を確認します。"""
+        """押付け空振り状態を確認。"""
         print("\n4d. 押付け空振り状態を確認します...")
         if self.check_status_bit(self.REG_DEVICE_STATUS, self.BIT_PUSH_MISS):
             print("   押付け空振り状態: 発生中 (PSFL=1)")
@@ -380,8 +304,8 @@ class CONController:
     # PCON-CBP, SCON-CA/CBなど、ロードセル対応機種専用の機能
     def get_load_N(self):
         """
-        現在の力荷重をニュートン(N)単位で取得します。(資料 p.66)
-        ※PCON-CBP, SCON-CA/CBなど、ロードセル対応機種専用の機能です。
+        現在の力荷重をニュートン(N)単位で取得。
+        ※PCON-CBP, SCON-CA/CBなど、ロードセル対応機種専用の機能。
         """
         print("\n6. 現在の力荷重を測定します...")
         try:
